@@ -29,12 +29,16 @@ S~ : 부호
 
 dirpath = "./train/"
 
+# json read
 def readJson(dirpath, filename):
     with open(dirpath + filename + '.jsonl', 'r', encoding="utf-8") as json_file:
         json_list = list(json_file)
 
     return [ json.loads(js) for js in json_list ]
 
+# mecab nlp preprocessing
+# only 동사, 명사, 영어
+# input : 한 문장 -> output : 정제된 한 문장 String to String
 def mecab_process(data):
     mcb = Mecab()
     data_processed = mcb.pos(data)
@@ -98,74 +102,91 @@ d1= """
 토트넘은 새로운 골키퍼를 모색 중이다. 영국 매체 '메트로'는 24일 "토트넘은 잉글랜드 국가대표에 뽑힌 핸더슨, 샘 존스톤, 닉 포프에 관심이 있다. 핸더슨은 맨유에서 주전이 아니면 떠날 수 있고 존스톤, 포프는 더 큰 팀으로 이적 가능성이 충분한 상태"라고 알렸다.
 """
 
+# 키워드 추출
+# min_count : 최소 출현 횟수 / max_len : 단어 최대 길이 / top : 키워드 상위 n 개
+def extractKeyword( data, min_count =3, max_len = 10, top = 20 ):
+    
+    #data = data.replace("\n", "").split(".")
+    data = [normalize(text, english=True, number=True) for text in data]
+    # 결과를 관찰하고 필요에 따라 이 부분에 mecab 추가
 
-#data = readJson(dirpath, "train")[0]["article_original"]
-d = d.replace("\n", "")
-original_data = d.split(".")
+    wordrank_extractor = KRWordRank(
+        min_count = min_count, # 단어의 최소 출현 빈도수 (그래프 생성 시)
+        max_length = max_len, # 단어의 최대 길이
+        verbose = True
+        )
 
-org_datas = [normalize(text, english=True, number=True) for text in original_data]
+    beta = 0.85    # PageRank의 decaying factor beta
+    max_iter = 10
+
+    # 키워드 추출을 위해 원본으로 키워드 추출
+    keywords, rank, graph = wordrank_extractor.extract(data, beta, max_iter)
+
+    for word, r in sorted(keywords.items(), key=lambda x:x[1], reverse=True)[:top]:
+        print('%8s:\t%.4f' % (word, r))
+        pass
+    
+    return sorted(keywords.items(), key=lambda x:x[1], reverse=True)[:top]
 
 
-wordrank_extractor = KRWordRank(
-    min_count = 3, # 단어의 최소 출현 빈도수 (그래프 생성 시)
-    max_length = 10, # 단어의 최대 길이
-    verbose = True
+# 문서 요약
+# stopwords : 불용어 리스트 / min_count : 최소 출현 횟수 / max_len : 단어 최대 길이 
+# keyword_extract : 문서 요약에 필요한 키워드 사전 개수 / sentences : 문장 추출 개수
+def document_summary(org_data, stopwords={}, min_count =3, max_len = 10, keyword_extract = 80, sentences = 4 ):
+    #org_data = data.replace("\n", "").split(".")
+    data =  [ mecab_process(d) for d in org_data ]
+
+    beta = 0.85    # PageRank의 decaying factor beta
+    max_iter = 10
+
+    wordrank_extractors = KRWordRank(
+        min_count = min_count, # 단어의 최소 출현 빈도수 (그래프 생성 시)
+        max_length = max_len, # 단어의 최대 길이
+        verbose = True
+        )
+    # 문서 요약 위해 정제한 것으로 문서 요약
+    keywords, rank, graph = wordrank_extractors.extract(data, beta, max_iter)
+
+
+    penalty = lambda x:0 if (15 <= len(x) <= 80) else 1
+    stopwords = {'너무', '정말', '진짜'} # 불용어 추후에 추가
+
+    keywords, sents = summarize_with_sentences(
+        data,
+        penalty=penalty,
+        stopwords = stopwords,
+        diversity=0.5, # 높을 수록 다양한 문장
+        num_keywords=keyword_extract, # 키워드 추출 개수
+        num_keysents=sentences, # 요약된 문장 개수
+        verbose=False
     )
+    print("doc summary keyword:", keywords)
 
-beta = 0.85    # PageRank의 decaying factor beta
-max_iter = 10
+    for s in sents : print("processed data>", s)
 
-# 키워드 추출을 위해 원본으로 키워드 추출
-keywords, rank, graph = wordrank_extractor.extract(org_datas, beta, max_iter)
+    # 정제된 데이터를 원본 데이터와 매칭
+    abstracts_data = []
+    for line in sents:
+        for d in org_data:
+            for indx, l in enumerate( line.split(" ") ):
+                if l not in d: break
+                    
+                else:
+                    if indx == len(line.split(" "))-1 :
+                        abstracts_data.append( d )
+
+    for s in abstracts_data : print("original data>", s)
+    
+    return abstracts_data
 
 
-for word, r in sorted(keywords.items(), key=lambda x:x[1], reverse=True)[:30]:
-    print('%8s:\t%.4f' % (word, r))
-    pass
+data = readJson(dirpath, "train")[0]["article_original"]
+#data = d.replace("\n", "").split(".")
+#data = data.split(".")
+extractKeyword( data,  min_count =3, max_len = 10, top = 20)
 
 # 여기까지 키워드 추출
 # -------------------
 # -------------------
 # 여기부터 문서 요약
-
-data =  [ mecab_process(d) for d in org_datas ]
-wordrank_extractors = KRWordRank(
-    min_count = 3, # 단어의 최소 출현 빈도수 (그래프 생성 시)
-    max_length = 10, # 단어의 최대 길이
-    verbose = True
-    )
-# 문서 요약 위해 정제한 것으로 문서 요양
-keywords, rank, graph = wordrank_extractors.extract(data, beta, max_iter)
-
-
-penalty = lambda x:0 if (15 <= len(x) <= 80) else 1
-stopwords = {'너무', '정말', '진짜'}
-
-keywords, sents = summarize_with_sentences(
-    data,
-    penalty=penalty,
-    stopwords = stopwords,
-    diversity=0.5, # 높을 수록 다양한 문장
-    num_keywords=80, # 키워드 추출 개수
-    num_keysents=4, # 요약된 문장 개수
-    verbose=False
-)
-print(keywords)
-
-for s in sents : print("processed data>", s)
-
-# 정제된 데이터를 원본 데이터와 매칭
-abstracts_data = []
-for line in sents:
-    for d in original_data:
-        for indx, l in enumerate( line.split(" ") ):
-            if l not in d: break
-                
-            else:
-                if indx == len(line.split(" "))-1 :
-                    abstracts_data.append( d )
-
-
-print(len(abstracts_data))
-for s in abstracts_data : print("original data>", s)
-
+document_summary(data, min_count =3, max_len = 10, keyword_extract = 80, sentences = 4 )
