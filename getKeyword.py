@@ -1,3 +1,7 @@
+'''
+21.03.25
+'''
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import defaultdict
 import re, json
@@ -7,13 +11,15 @@ from krwordrank.word import KRWordRank
 from krwordrank.hangle import normalize
 from krwordrank.sentence import summarize_with_sentences
 
+from libs.makeWordCloud import make_wordcloud
+
 '''
 기능 생각
-> 키워드 3~8개 설정
-> 워드 클라우드 생성
+> 키워드 3~8개 설정 (mecab 여부)
+> 워드 클라우드 생성 (mecab 적용 > 명사만)
 > 감성 분석 모델 적용(감성 단위 5단계 구분)
-> 문서 요약 - 문장 추출 (문장 3~6개)
-> 문서 요약 - 추상 추출(딥러닝)
+> 문서 요약 - 문장 추출 (문장 3~6개)(mecab 여부)
+> 문서 요약 - 추상 추출 (딥러닝)
 
 Mecab()
 * N~ : 체언
@@ -109,6 +115,9 @@ def extractKeyword( data, min_count =3, max_len = 10, top = 20 ):
     #data = data.replace("\n", "").split(".")
     data = [normalize(text, english=True, number=True) for text in data]
     # 결과를 관찰하고 필요에 따라 이 부분에 mecab 추가
+    data =  [ mecab_process(d) for d in data ]
+    
+    make_wordcloud(" ".join(data), "word clouds test")
 
     wordrank_extractor = KRWordRank(
         min_count = min_count, # 단어의 최소 출현 빈도수 (그래프 생성 시)
@@ -134,6 +143,7 @@ def extractKeyword( data, min_count =3, max_len = 10, top = 20 ):
 # keyword_extract : 문서 요약에 필요한 키워드 사전 개수 / sentences : 문장 추출 개수
 def document_summary(org_data, stopwords={}, min_count =3, max_len = 10, keyword_extract = 80, sentences = 4 ):
     #org_data = data.replace("\n", "").split(".")
+    
     data =  [ mecab_process(d) for d in org_data ]
 
     beta = 0.85    # PageRank의 decaying factor beta
@@ -144,7 +154,7 @@ def document_summary(org_data, stopwords={}, min_count =3, max_len = 10, keyword
         max_length = max_len, # 단어의 최대 길이
         verbose = True
         )
-    # 문서 요약 위해 정제한 것으로 문서 요약
+    # 문서 요약 위해 정제한 것으로 문서 요약 / 결과를 지켜보고 org data로 변경 가능
     keywords, rank, graph = wordrank_extractors.extract(data, beta, max_iter)
 
 
@@ -179,14 +189,16 @@ def document_summary(org_data, stopwords={}, min_count =3, max_len = 10, keyword
     
     return abstracts_data
 
+if __name__ == "__main__":
+    data = readJson(dirpath, "train")[0]["article_original"]
+    #data = d1.replace("\n", "").split(".")
 
-data = readJson(dirpath, "train")[0]["article_original"]
-#data = d.replace("\n", "").split(".")
-#data = data.split(".")
-extractKeyword( data,  min_count =3, max_len = 10, top = 20)
+    # 키워드 추출
+    keywords = extractKeyword( data,  min_count =3, max_len = 10, top = 20)
 
-# 여기까지 키워드 추출
-# -------------------
-# -------------------
-# 여기부터 문서 요약
-document_summary(data, min_count =3, max_len = 10, keyword_extract = 80, sentences = 4 )
+
+    # -------------------
+    # -------------------
+
+    # 문서 요약
+    document_summary(data, min_count =3, max_len = 10, keyword_extract = 80, sentences = 4 )
