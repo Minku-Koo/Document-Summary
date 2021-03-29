@@ -26,6 +26,6 @@ def make_wordcloud(text, title, stopword = ["이다", "있다"], word_max = 50, 
     
     plt.imshow(wordcloud, interpolation='lanczos') #이미지의 부드럽기 정도
     plt.axis('off') # x y 축 숫자 제거
-    plt.savefig(save_path+ 'wordclouds/wordcloud.png', dpi=400) 
+    #plt.savefig(save_path+ 'wordclouds/wordcloud.png', dpi=400) 
     return 
 
