@@ -12,6 +12,7 @@ from krwordrank.hangle import normalize
 from krwordrank.sentence import summarize_with_sentences
 
 from libs.makeWordCloud import make_wordcloud
+from textrankr import TextRank
 
 '''
 기능 생각
@@ -189,10 +190,37 @@ def document_summary(org_data, stopwords={}, min_count =3, max_len = 10, keyword
     
     return abstracts_data
 
+from typing import List
+class MecabTokenizer:
+    mcb = Mecab()
+
+    def __call__(self, text: str) -> List[str]:
+        tokens: List[str] = self.mcb.morphs(text)
+        return tokens
+
+def text_summary(data):
+    data =  [ mecab_process(d) for d in data ]
+    data = " ".join(data)
+
+    textRank = TextRank(MecabTokenizer())
+    k = 1
+    summarized = textRank.summarize(data, k)
+    print("summarized:",summarized) 
+
+
+    summaries = textRank.summarize(data, k, verbose=False)
+    for summary in summaries:
+        print("summary:",summary)
+        pass
+
+
+
+
 if __name__ == "__main__":
     data = readJson(dirpath, "train")[0]["article_original"]
     #data = d1.replace("\n", "").split(".")
-
+    print( " ".join(data) )
+    data = d.replace("\n", "").split(".")
     # 키워드 추출
     keywords = extractKeyword( data,  min_count =3, max_len = 10, top = 20)
 
@@ -202,3 +230,6 @@ if __name__ == "__main__":
 
     # 문서 요약
     document_summary(data, min_count =3, max_len = 10, keyword_extract = 80, sentences = 4 )
+
+    text_summary(data)
+    
